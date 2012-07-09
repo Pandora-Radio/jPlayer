@@ -1,4 +1,4 @@
-﻿/*
+/*
  * jPlayer Plugin for jQuery JavaScript Library
  * http://www.happyworm.com/jquery/jplayer
  *
@@ -21,6 +21,7 @@ package happyworm.jPlayer {
 	import flash.net.NetStream;
 
 	import flash.utils.Timer;
+	import flash.utils.setTimeout;
 
 	import flash.events.NetStatusEvent;
 	import flash.events.SecurityErrorEvent;
@@ -50,7 +51,7 @@ package happyworm.jPlayer {
 			timeUpdateTimer.addEventListener(TimerEvent.TIMER, timeUpdateHandler);
 			progressTimer.addEventListener(TimerEvent.TIMER, progressHandler);
 			seekingTimer.addEventListener(TimerEvent.TIMER, seekingHandler);
-
+			
 			myStatus.volume = volume;
 		}
 		private function progressUpdates(active:Boolean):void {
@@ -83,7 +84,9 @@ package happyworm.jPlayer {
 			}
 		}
 		private function timeUpdateHandler(e:TimerEvent):void {
-			timeUpdateEvent();
+			if(!myStatus.flashIsSeeking){
+				setTimeout(timeUpdateEvent, 100);
+			}
 		}
 		private function timeUpdateEvent():void {
 			updateStatusValues();
@@ -135,6 +138,12 @@ package happyworm.jPlayer {
 					break;
 				case "NetStream.Play.Start":
 					// This event code occurs once, when the media is opened. Equiv to loadOpen() in mp3 player.
+					
+					//If we're not playing from the start, temporarily mute the stream; otherwise, while we seek to the starting position, the audio will come through.
+					if(myStatus.pausePosition > 0){
+						setTemporaryVolume(0);
+					}
+
 					myStatus.loading();
 					this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_LOADSTART, myStatus));
 					progressUpdates(true);
@@ -156,11 +165,29 @@ package happyworm.jPlayer {
 					myStatus.error(); // Resets status except the src, and it sets srcError property.
 					this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_ERROR, myStatus));
 					break;
+				case "NetStream.SeekStart.Notify":
+					myStatus.flashIsSeeking = true;
+					break;
+				case "NetStream.Seek.Notify":
+					// A typical seek call involves 1) pausing the stream, 2) seeking, then 3) waiting for Flash to finish seeking. We're at step 3 now.
+					// However, step 3 can be triggered when someone hits pause then seeks around. So, we need to keep track of that case.
+					// myStatus.playAfterFlashIsSeeking is the flag that distinguishes this use case.
+					if(myStatus.playAfterFlashIsSeeking){
+						myStatus.playAfterFlashIsSeeking = false; // Unset the flag.
+						myStatus.isPlaying = true; // Set immediately before playing. Could affects events.
+						timeUpdates(true); // Resume time updates.
+						myStream.resume(); // Resume the stream.
+						restoreVolume();
+						this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_PLAY, myStatus)); // Note that we're playing the stream again.
+					}
+					myStatus.flashIsSeeking = false; // Note that Flash is no longer seeking.
+					break;
 			}
 			// "NetStream.Seek.Notify" event code is not very useful. It occurs after every seek(t) command issued and does not appear to wait for the media to be ready.
 		}
 		private function endedEvent():void {
 			var wasPlaying:Boolean = myStatus.isPlaying;
+			myStatus.flashIsSeeking = false;
 			pause(0);
 			timeUpdates(false);
 			timeUpdateEvent();
@@ -182,6 +209,7 @@ package happyworm.jPlayer {
 			myStream.client = customClient;
 			myVideo.attachNetStream(myStream);
 			setVolume(myStatus.volume);
+			setTemporaryVolume(0);
 			myStream.play(myStatus.src);
 		}
 		public function setFile(src:String):void {
@@ -212,7 +240,7 @@ package happyworm.jPlayer {
 		}
 		public function play(time:Number = NaN):Boolean {
 			var wasPlaying:Boolean = myStatus.isPlaying;
-
+			
 			if(!isNaN(time) && myStatus.srcSet) {
 				if(myStatus.isPlaying) {
 					myStream.pause();
@@ -238,18 +266,29 @@ package happyworm.jPlayer {
 						this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_PAUSE, myStatus));
 					}
 				} else if(getSeekTimeRatio() > getLoadRatio()) { // Use an estimate based on the downloaded amount
+					// This case, we're trying to play past where we're loaded. We need to wait for loading to catch up.
 					myStatus.playOnSeek = true;
 					seeking(true);
-					myStream.pause(); // Since it is playing by default at this point.
+					// Normally we would pause the stream at this point, since the player is playing at this point.
+					// But that can do bizarre things with AAC files.
+					// For now, turn off the volume.
+					setTemporaryVolume(0);
 				} else {
+					// We're at place where we're ready to play the stream, or seek to the play point.
 					if(!isNaN(time)) { // Avoid using seek() when it is already correct.
-						myStream.seek(myStatus.pausePosition/1000); // Since time is in ms and seek() takes seconds
-					}
-					myStatus.isPlaying = true; // Set immediately before playing. Could affects events.
-					myStream.resume();
-					timeUpdates(true);
-					if(!wasPlaying) {
-						this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_PLAY, myStatus));
+						// We're ready to seek to the pause point and play it.
+						// Again, calling this prematurely can do bizarre things with AAC files. So it's wrapped in a timeout.
+						setTemporaryVolume(0);
+						setTimeout(seekToPausePositionAndPlay, 250); // Try seeking in 250ms. (Calling it immediately may cause failures.)
+					}else{
+						// We're ready to play from wherever we're at. Resume.
+						myStatus.isPlaying = true; // Set immediately before playing. Could affects events.
+						timeUpdates(true);
+						myStream.resume();
+						restoreVolume();
+						if(!wasPlaying) {
+							this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_PLAY, myStatus));
+						}
 					}
 				}
 				return true;
@@ -257,11 +296,19 @@ package happyworm.jPlayer {
 				return false;
 			}
 		}
+
+		public function seekToPausePositionAndPlay():void {
+			setTemporaryVolume(0);
+			myStatus.playAfterFlashIsSeeking = true; // Note that once flash is done seeking, we should resume/play the stream.
+			myStream.seek(myStatus.pausePosition/1000); // Seek to the pause position.
+		}
+
 		public function pause(time:Number = NaN):Boolean {
 			myStatus.playOnLoad = false; // Reset flag in case load/play issued immediately before this command, ie., before onMetadata() event.
 			myStatus.playOnSeek = false; // Reset flag in case play(time) issued before the command and is still seeking to time set.
 
 			var wasPlaying:Boolean = myStatus.isPlaying;
+			var flashWasSeeking:Boolean = myStatus.flashIsSeeking;
 
 			// To avoid possible loops with timeupdate and pause(time). A pause() does not have the problem.
 			var alreadyPausedAtTime:Boolean = false;
@@ -271,18 +318,22 @@ package happyworm.jPlayer {
 
 			// Need to wait for metadata to load before ever issuing a pause. The metadata handler will call this function if needed, when ready.
 			if(myStream != null && myStatus.metaDataReady) { // myStream is a null until the 1st media is loaded. ie., The 1st ever setMedia being followed by a pause() or pause(t).
+
 				myStream.pause();
 			}
 			if(myStatus.isPlaying) {
 				myStatus.isPlaying = false;
 				myStatus.pausePosition = myStream.time * 1000;
 			}
-			
+			if(myStatus.flashIsSeeking){
+				myStatus.isPlaying = false;
+				myStatus.playAfterFlashIsSeeking = false;
+			}
 			if(!isNaN(time) && myStatus.srcSet) {
 				myStatus.pausePosition = time;
 			}
 
-			if(wasPlaying) {
+			if(wasPlaying || flashWasSeeking) {
 				this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_PAUSE, myStatus));
 			}
 
@@ -297,14 +348,14 @@ package happyworm.jPlayer {
 			} else if(myStatus.isLoading || myStatus.isLoaded) {
 				if(myStatus.metaDataReady && myStatus.pausePosition > myStatus.duration) { // The time is invalid, ie., past the end.
 					myStatus.pausePosition = 0;
-					myStream.seek(0);
+					seekToPausePositionAndPlay();
 					seekedEvent(); // Deals with seeking effect when using setMedia() then pause(huge). NB: There is no preceeding seeking event.
 				} else if(!isNaN(time)) {
 					if(getSeekTimeRatio() > getLoadRatio()) { // Use an estimate based on the downloaded amount
 						seeking(true);
 					} else {
 						if(myStatus.metaDataReady) { // Otherwise seek(0) will stop the metadata loading.
-							myStream.seek(myStatus.pausePosition/1000);
+							seekToPausePositionAndPlay();
 						}
 					}
 				}
@@ -334,6 +385,16 @@ package happyworm.jPlayer {
 				myStream.soundTransform = myTransform;
 			}
 		}
+		private function setTemporaryVolume(v:Number):void {
+			myTransform.volume = v;
+			if(myStream != null) {
+				myStream.soundTransform = myTransform;
+			}
+		}
+		private function restoreVolume():void {
+			setVolume(myStatus.volume);
+		}
+		
 		private function updateStatusValues():void {
 			myStatus.seekPercent = 100 * getLoadRatio();
 			myStatus.currentTime = getCurrentTime();
@@ -352,7 +413,7 @@ package happyworm.jPlayer {
 			return myStatus.duration; // Set from meta data.
 		}
 		public function getCurrentTime():Number {
-			if(myStatus.isPlaying) {
+			if(myStatus.isPlaying && !myStatus.flashIsSeeking) {
 				return myStream.time * 1000;
 			} else {
 				return myStatus.pausePosition;
@@ -402,7 +463,11 @@ package happyworm.jPlayer {
 						play(); // Not always sending pausePosition avoids the extra seek(0) for a normal play() command.
 					}
 				} else {
-					pause(myStatus.pausePosition); // Always send the pausePosition. Important for setMedia() followed by pause(time). Deals with not reading stream.time with setMedia() and play() immediately followed by stop() or pause(0)
+					// pause() is wrapped in a timeout due to a bug where triggering pause() or seek() on a NetStream
+					// object too soon after instantiation causing a loss of audio.
+					setTimeout(function():void {
+						pause(myStatus.pausePosition);
+					}, 10); // Always send the pausePosition. Important for setMedia() followed by pause(time). Deals with not reading stream.time with setMedia() and play() immediately followed by stop() or pause(0)
 				}
 				this.dispatchEvent(new JplayerEvent(JplayerEvent.JPLAYER_LOADEDMETADATA, myStatus));
 			} else {
