@@ -188,7 +188,10 @@ package happyworm.jPlayer {
 		private function endedEvent():void {
 			var wasPlaying:Boolean = myStatus.isPlaying;
 			myStatus.flashIsSeeking = false;
-			pause(0);
+			// This is (theoretically) causing the double-play and LifeHacker bug.
+			// By going back to the beginning when the track has ended, it opens up the possibility for the song to loop.
+			// There doesn't seem to be a use case within Pandora for a loop, so this commented out.
+			//pause(0);
 			timeUpdates(false);
 			timeUpdateEvent();
 			if(wasPlaying) {
@@ -279,7 +282,7 @@ package happyworm.jPlayer {
 						// We're ready to seek to the pause point and play it.
 						// Again, calling this prematurely can do bizarre things with AAC files. So it's wrapped in a timeout.
 						setTemporaryVolume(0);
-						setTimeout(seekToPausePositionAndPlay, 250); // Try seeking in 250ms. (Calling it immediately may cause failures.)
+						setTimeout(seekToPausePositionAndPlay, 500); // Try seeking in 500ms. (Calling it immediately may cause failures.)
 					}else{
 						// We're ready to play from wherever we're at. Resume.
 						myStatus.isPlaying = true; // Set immediately before playing. Could affects events.
@@ -297,10 +300,14 @@ package happyworm.jPlayer {
 			}
 		}
 
-		public function seekToPausePositionAndPlay():void {
+		public function seekToPausePosition():void {
 			setTemporaryVolume(0);
-			myStatus.playAfterFlashIsSeeking = true; // Note that once flash is done seeking, we should resume/play the stream.
 			myStream.seek(myStatus.pausePosition/1000); // Seek to the pause position.
+		}
+
+		public function seekToPausePositionAndPlay():void {
+			myStatus.playAfterFlashIsSeeking = true; // Note that once flash is done seeking, we should resume/play the stream.
+			seekToPausePosition();
 		}
 
 		public function pause(time:Number = NaN):Boolean {
@@ -348,14 +355,14 @@ package happyworm.jPlayer {
 			} else if(myStatus.isLoading || myStatus.isLoaded) {
 				if(myStatus.metaDataReady && myStatus.pausePosition > myStatus.duration) { // The time is invalid, ie., past the end.
 					myStatus.pausePosition = 0;
-					seekToPausePositionAndPlay();
+					seekToPausePosition();
 					seekedEvent(); // Deals with seeking effect when using setMedia() then pause(huge). NB: There is no preceeding seeking event.
 				} else if(!isNaN(time)) {
 					if(getSeekTimeRatio() > getLoadRatio()) { // Use an estimate based on the downloaded amount
 						seeking(true);
 					} else {
 						if(myStatus.metaDataReady) { // Otherwise seek(0) will stop the metadata loading.
-							seekToPausePositionAndPlay();
+							seekToPausePosition();
 						}
 					}
 				}
