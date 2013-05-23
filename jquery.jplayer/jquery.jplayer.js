@@ -8,8 +8,8 @@
  *  - http://www.gnu.org/copyleft/gpl.html
  *
  * Author: Mark J Panaghiston
- * Version: 2.3.0
- * Date: 20th April 2013
+ * Version: 2.3.3
+ * Date: 20th May 2013
  */
 
 /* Code verified using http://www.jshint.com/ */
@@ -454,8 +454,8 @@
 	$.jPlayer.prototype = {
 		count: 0, // Static Variable: Change it via prototype.
 		version: { // Static Object
-			script: "2.3.0",
-			needFlash: "2.3.0",
+			script: "2.3.3",
+			needFlash: "2.3.3",
 			flash: "unknown"
 		},
 		options: { // Instanced in $.jPlayer() constructor
@@ -763,6 +763,8 @@
 
 			this.options.volume = this._limitValue(this.options.volume, 0, 1); // Limit volume value's bounds.
 
+      this.useSourceTag = this.options.useSourceTag;
+
 			// Create the formats array, with prority based on the order of the supplied formats string
 			$.each(this.options.supplied.toLowerCase().split(","), function(index1, value1) {
 				var format = value1.replace(/^\s+|\s+$/g, ""); //trim
@@ -1003,6 +1005,7 @@
 
 					htmlObj = document.createElement("object");
 					htmlObj.setAttribute("id", this.internal.flash.id);
+					htmlObj.setAttribute("name", this.internal.flash.id);
 					htmlObj.setAttribute("data", this.internal.flash.swf);
 					htmlObj.setAttribute("type", "application/x-shockwave-flash");
 					htmlObj.setAttribute("width", "1"); // Non-zero
@@ -1751,6 +1754,10 @@
 				this._urlNotSetError("stop");
 			}
 		},
+
+    /*
+    we don't support this.
+
 		playHead: function(p) {
 			p = this._limitValue(p, 0, 100);
 			if(this.status.srcSet) {
@@ -1763,6 +1770,7 @@
 				this._urlNotSetError("playHead");
 			}
 		},
+		*/
 		_muted: function(muted) {
 			this.options.muted = muted;
 			if(this.html.used) {
@@ -1957,9 +1965,12 @@
 		playBar: function(e) { // Handles clicks on the playBar
 			this.seekBar(e);
 		},
+    /*
+    we don't support this.
 		repeat: function() { // Handle clicks on the repeat button
 			this._loop(true);
 		},
+		*/
 		repeatOff: function() { // Handle clicks on the repeatOff button
 			this._loop(false);
 		},
@@ -2330,7 +2341,16 @@
 				$media.append(track);
 			});
 
-			this.htmlElement.media.src = this.status.src;
+      //set the type from the format.
+      var format = this.format[this.status.formatType];
+      if(this.useSourceTag && format && format.codec){
+        var source = document.createElement('source');
+        source.setAttribute("src",this.status.src);
+        source.setAttribute("type", format.codec.replace(/\"/g, ""));
+        $media.append(source);
+      }else{
+        this.htmlElement.media.src = this.status.src;
+      }
 
 			if(this.options.preload !== 'none') {
 				this._html_load(); // See function for comments
@@ -2372,7 +2392,11 @@
 		},
 		_html_clearMedia: function() {
 			if(this.htmlElement.media) {
-				this.htmlElement.media.src = "about:blank";
+        if (this.useSourceTag) {
+          $(this.htmlElement.media).empty();
+        } else {
+          this.htmlElement.media.src = "about:blank";
+        }
 				// The following load() is only required for Firefox 3.6 (PowerMacs).
 				// Recent HTMl5 browsers only require the src change. Due to changes in W3C spec and load() effect.
 				this.htmlElement.media.load(); // Stops an old, "in progress" download from continuing the download. Triggers the loadstart, error and emptied events, due to the empty src. Also an abort event if a download was in progress.

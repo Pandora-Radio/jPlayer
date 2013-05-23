@@ -8,13 +8,13 @@
  *  - http://www.gnu.org/copyleft/gpl.html
  *
  * Author: Mark J Panaghiston
- * Date: 20th April 2013
+ * Date: 20th May 2013
  */
 
 package happyworm.jPlayer {
 	public class JplayerStatus {
 
-		public static const VERSION:String = "2.3.0"; // The version of the Flash jPlayer entity.
+		public static const VERSION:String = "2.3.3"; // The version of the Flash jPlayer entity.
 
 		public var volume:Number = 0.5; // Not affected by reset()
 		public var muted:Boolean = false; // Not affected by reset()
@@ -26,6 +26,8 @@ package happyworm.jPlayer {
 		public var isPlaying:Boolean;
 		public var isSeeking:Boolean;
 		public var flashIsSeeking:Boolean;
+
+		public var isWaiting:Boolean;
 
 		public var playOnLoad:Boolean;
 		public var playOnSeek:Boolean;
@@ -60,6 +62,8 @@ package happyworm.jPlayer {
 			isPlaying = false;
 			isSeeking = false;
 			flashIsSeeking = false;
+
+			isWaiting = false;
 
 			playOnLoad = false;
 			playOnSeek = false;
