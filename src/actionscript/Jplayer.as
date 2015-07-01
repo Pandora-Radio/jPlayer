@@ -76,11 +76,6 @@ package {
 		private var txLog:TextField;
 		private var debug:Boolean = false; // Set debug to false for release compile!
 
-		private var logAllToJSConsole:Boolean = false; // Whether or not to log all messages to the JavaScript console.
-		private var localAIRDebug:Boolean = false; // This is autodetermined by AIR app - leave false!
-
-		private var traceOut:TraceOut;
-
 		public function Jplayer() {
 
 			flash.system.Security.allowDomain("*");
@@ -534,10 +529,6 @@ package {
 			}
 		}
 
-		private function tracer(msg:String):void {
-			traceOut.tracer(msg);
-		}
-
 		private function extractStatusData(data:JplayerStatus):Object {
 			var myStatus:Object = {
 				version: JplayerStatus.VERSION,
@@ -636,13 +627,7 @@ package {
 		private function log(t:String):void {
 			if(debug) {
 				txLog.text = t + "\n" + txLog.text;
-
-				localAIRDebug = traceOut.localAIRDebug();
-				if(localAIRDebug) {
-					tracer(t);
-				}
-
-				if(ExternalInterface.available && logAllToJSConsole && !securityIssue) {
+				if(ExternalInterface.available && !securityIssue) {
 					ExternalInterface.call("console.log", t);
 				}
 			}
