@@ -7,17 +7,16 @@
 
 	<property name="FLEX_HOME" value="${env.FLEX_HOME}" description="The Flex compiler requires this to be set"/>
 
-	<property name="player.local.dir" value="${basedir}/jquery.jplayer"
-			  description="The local directory where the jPlayer source code resides"/>
-	<property name="player.radio.dir" value="${env.PROJECTS_DIR}/radio/www/js/libs/jquery.jplayer-2.3.9"
+	<property name="player.radio.dir" value="${env.PROJECTS_DIR}/radio/www/js/libs/jquery.jplayer-2.9.2"
 			  description="The radio project source code directory where the jPlayer code resides"/>
 
-	<property name="flex.src.dir" value="${basedir}/actionscript"
+	<property name="flex.src.dir" value="${basedir}/src/actionscript"
 			  description="ActionScript source code for the jPlayer"/>
-	<property name="flex.output.file" value="${player.local.dir}/Jplayer.swf"
+
+	<property name="flex.output.file" value="${basedir}/dist/jplayer/Jplayer.swf"
 			  description="Flex compiler build products"/>
 
-	<property name="jPlayer.src.file" value="${player.local.dir}/jquery.jplayer.js"
+	<property name="jPlayer.src.file" value="${basedir}/src/javascript/jplayer/jquery.jplayer.js"
 			  description="JavaScript source code for the jPlayer"/>
 
 	<taskdef resource="flexTasks.tasks" classpath="${FLEX_HOME}/ant/lib/flexTasks.jar"

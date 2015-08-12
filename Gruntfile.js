@@ -132,8 +132,8 @@ module.exports = function(grunt) {
 			},
 			jplayer: {
 				files: {
-					// Compile and give the SWF a filename like the JavaScript filenames. Important as it is the jPlayer code.
-					'dist/jplayer/jquery.jplayer.swf': ['src/actionscript/Jplayer.as']
+					// Compile and give the SWF a filename like the defined in the JavaScript files. Important as it is the jPlayer code.
+					'dist/jplayer/Jplayer.swf': ['src/actionscript/Jplayer.as']
 				}
 			}
 		}
